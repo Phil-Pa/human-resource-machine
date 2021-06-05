@@ -1,0 +1,19 @@
+// prepare 2 numbers for multiply
+inbox
+copyto 0
+inbox
+copyto 1
+
+// prepare sum and multiply count down
+copyfrom 9
+copyto 3	# sum
+copyfrom 1
+copyto 2	# countdown
+
+copyfrom 0
+add 3
+bump- 2
+jumpzero 18
+
+copyfrom 3
+outbox

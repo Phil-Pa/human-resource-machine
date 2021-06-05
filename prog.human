@@ -1,0 +1,17 @@
+copyfrom 9
+copyto 1
+copyto 2
+bump+ 1
+inbox
+copyto 2
+label 1
+sub 1
+copyto 3
+add 2
+copyto 2
+copyfrom 3
+jumpzero 2
+jump 1
+label 2
+copyfrom 2
+outbox

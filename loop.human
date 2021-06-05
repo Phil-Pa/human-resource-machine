@@ -1,0 +1,9 @@
+copyfrom 9
+copyto 0
+copyto 2
+label 1
+copyfrom 2
+bump+ 2
+copyto 2
+copyfrom 9
+jumpzero 1
