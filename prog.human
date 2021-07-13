@@ -1,12 +1,15 @@
 copyfrom 9
 copyto 1
 copyto 2
+bump+ 2
 bump+ 1
 inbox
 copyto 2
 label 1
 sub 1
 copyto 3
+outbox
+copyfrom 3
 add 2
 copyto 2
 copyfrom 3
