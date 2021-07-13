@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::*;
 use std::iter::FromIterator;
 use std::{collections::VecDeque, env};
@@ -17,24 +18,6 @@ enum Instruction {
     Jump(u32),
     JumpIfZero(u32),
     JumpIfNegative(u32),
-}
-
-fn jump(instructions: &[Instruction], n: u32) -> usize {
-    let labels: Vec<&Instruction> = instructions
-        .iter()
-        .filter(|x| {
-            if **x == Instruction::Label(n) {
-                return true;
-            }
-            false
-        })
-        .collect();
-    let label = **labels.first().expect("could not find the label");
-    let label_instruction_address = instructions
-        .iter()
-        .position(|x| *x == label)
-        .expect("could not find label");
-    label_instruction_address
 }
 
 fn read_file_to_lines(filename: &Path) -> Vec<String> {
@@ -129,12 +112,36 @@ struct Machine {
     enable_logging: bool,
     program_counter: usize,
     instruction_count: i32,
+    num_to_label_map: HashMap<u32, usize>,
 }
 
 impl Machine {
+    fn create_label_num_to_address_map(instructions: &[Instruction]) -> HashMap<u32, usize> {
+        let mut map = HashMap::new();
+
+        for ins in instructions.iter() {
+            match ins {
+                Instruction::Label(n) => {
+                    map.insert(*n, *ins);
+                }
+                _ => {}
+            }
+        }
+
+        let mut num_to_label_map = HashMap::new();
+
+        for (label_num, label) in map {
+            let address = instructions.iter().position(|x| *x == label).unwrap();
+            num_to_label_map.insert(label_num, address);
+        }
+        num_to_label_map
+    }
     pub fn new(instructions: Vec<Instruction>, num_registers: usize, enable_logging: bool) -> Self {
         let mut register: Vec<Option<i32>> = std::iter::repeat(None).take(num_registers).collect();
         register[num_registers - 1] = Some(0i32);
+
+        let num_to_label_map = Machine::create_label_num_to_address_map(&instructions);
+
         Self {
             instructions,
             register,
@@ -142,7 +149,11 @@ impl Machine {
             enable_logging,
             program_counter: 0,
             instruction_count: 0,
+            num_to_label_map,
         }
+    }
+    fn jump(&mut self, n: u32) -> usize {
+        *self.num_to_label_map.get(&n).unwrap()
     }
     fn reset(&mut self) {
         self.buffer = Some(0i32);
@@ -175,8 +186,7 @@ impl Machine {
                     if next.is_some() {
                         self.buffer = Some(*next.unwrap() as i32);
                     } else {
-                        // TODO: panic
-                        break;
+                        panic!("input in inbox must not be None");
                     }
                 }
                 Instruction::Outbox => {
@@ -218,7 +228,7 @@ impl Machine {
                 }
                 Instruction::Label(_) => {}
                 Instruction::Jump(n) => {
-                    let new_instruction_address = jump(&self.instructions, n);
+                    let new_instruction_address = self.jump(n);
 
                     self.program_counter = new_instruction_address;
                     continue;
@@ -226,8 +236,7 @@ impl Machine {
                 Instruction::JumpIfZero(instruction_number) => match self.buffer {
                     Some(n) => {
                         if n == 0 {
-                            let new_instruction_address =
-                                jump(&self.instructions, instruction_number);
+                            let new_instruction_address = self.jump(instruction_number);
                             self.program_counter = new_instruction_address;
 
                             continue;
@@ -238,8 +247,7 @@ impl Machine {
                 Instruction::JumpIfNegative(instruction_number) => match self.buffer {
                     Some(n) => {
                         if n < 0 {
-                            let new_instruction_address =
-                                jump(&self.instructions, instruction_number);
+                            let new_instruction_address = self.jump(instruction_number);
                             self.program_counter = new_instruction_address;
 
                             continue;
@@ -264,13 +272,6 @@ pub fn string_to_lines(program: &str) -> Vec<&str> {
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    /*
-    let args: Vec<String> = vec!["progpath", "prog.human", "1", "5"]
-        .iter()
-        .map(|x| String::from_str(*x).unwrap())
-        .collect();
-        */
-
     let filename = Path::new(&args[1]); //Path::new("mul.human"); //
     let lines = read_file_to_lines(filename);
     let instructions = get_instructions(lines.iter().map(|x| x.as_str()).collect());
@@ -282,7 +283,6 @@ fn main() {
         .skip(3)
         .map(|x| x.parse().expect("cannot parse to number"))
         .collect::<Vec<i32>>();
-    //let mut inbox = VecDeque::from(vec![5, 1, 2, 3]);
 
     let mut machine = Machine::new(instructions, 10, enable_logging);
     let outbox = machine.run(&inbox);
@@ -297,7 +297,6 @@ fn main() {
 mod tests {
 
     use super::*;
-
 
     #[test]
     fn test_sum() {
