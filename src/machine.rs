@@ -1,6 +1,9 @@
-use std::collections::VecDeque;
 use std::collections::HashMap;
+use std::collections::VecDeque;
+use std::fmt::Arguments;
+use std::io::*;
 use std::iter::FromIterator;
+use std::{fs::File, path::Path};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Instruction {
@@ -17,6 +20,102 @@ pub enum Instruction {
     Jump(u32),
     JumpIfZero(u32),
     JumpIfNegative(u32),
+}
+
+pub fn read_file_to_lines(filename: &Path) -> Vec<String> {
+    let file = File::open(filename).expect("cannot find file");
+    let reader = BufReader::new(file);
+
+    let lines = reader.lines();
+    let lines = lines.map(|x| x.expect("cant read file to lines")).collect();
+    lines
+}
+
+pub fn get_instructions(lines: Vec<&str>) -> Vec<Instruction> {
+    let mut instructions = Vec::new();
+
+    for mut line in lines {
+        line = line.trim();
+        // TODO
+        if line.starts_with("//") || line.is_empty() {
+            continue;
+        }
+        if line.contains('#') {
+            // BumpPlus 2 # this is a comment
+            line = &line[0..line.find('#').expect("could not find # in line")];
+        }
+        let parts: Vec<&str> = line.split_ascii_whitespace().collect();
+
+        match parts[0] {
+            "inbox" => instructions.push(Instruction::Inbox),
+            "outbox" => {
+                instructions.push(Instruction::Outbox);
+            }
+            "copyfrom" => instructions.push(Instruction::CopyFrom(
+                parts[1].parse().expect("cannot parse to number"),
+            )),
+            "copyto" => {
+                instructions.push(Instruction::CopyTo(
+                    parts[1].parse().expect("cannot parse to number"),
+                ));
+            }
+            "add" => {
+                instructions.push(Instruction::Add(
+                    parts[1].parse().expect("cannot parse to number"),
+                ));
+            }
+            "sub" => {
+                instructions.push(Instruction::Sub(
+                    parts[1].parse().expect("cannot parse to number"),
+                ));
+            }
+            "mul" => {
+                instructions.push(Instruction::Mul(
+                    parts[1].parse().expect("cannot parse to number"),
+                ));
+            }
+            "bump+" => {
+                instructions.push(Instruction::BumpPlus(
+                    parts[1].parse().expect("cannot parse to number"),
+                ));
+            }
+            "bump-" => {
+                instructions.push(Instruction::BumpMinus(
+                    parts[1].parse().expect("cannot parse to number"),
+                ));
+            }
+            "label" => {
+                instructions.push(Instruction::Label(
+                    parts[1].parse().expect("cannot parse to number"),
+                ));
+            }
+            "jump" => {
+                instructions.push(Instruction::Jump(
+                    parts[1].parse().expect("cannot parse to number"),
+                ));
+            }
+            "jumpzero" => {
+                instructions.push(Instruction::JumpIfZero(
+                    parts[1].parse().expect("cannot parse to number"),
+                ));
+            }
+            "jumpnegative" => {
+                instructions.push(Instruction::JumpIfNegative(
+                    parts[1].parse().expect("cannot parse to number"),
+                ));
+            }
+            _ => {
+                panic!("{}: instruction not found", line);
+            }
+        }
+    }
+
+    instructions
+}
+
+pub fn string_to_lines(program: &str) -> Vec<&str> {
+    let lines: Vec<&str> = program.split("\n").filter(|x| !x.is_empty()).collect();
+    lines
 }
 
 pub struct Machine {
@@ -52,6 +151,19 @@ impl Machine {
     }
     pub fn get_instruction_count(&self) -> i32 {
         self.instruction_count
+    }
+    pub fn new_from_file(
+        filename: &str,
+        enable_logging: bool,
+    ) -> core::result::Result<Self, String> {
+        let path = Path::new(&filename);
+        if !path.exists() {
+            return Err(String::from(filename));
+        }
+        let lines = read_file_to_lines(path);
+        let instructions = get_instructions(lines.iter().map(|x| x.as_str()).collect());
+
+        Ok(Machine::new(instructions, 10, enable_logging))
     }
     pub fn new(instructions: Vec<Instruction>, num_registers: usize, enable_logging: bool) -> Self {
         let mut register: Vec<Option<i32>> = std::iter::repeat(None).take(num_registers).collect();
