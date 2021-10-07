@@ -29,4 +29,4 @@ To run your program, run
 
 Example:
 
-`cargo r --release "prog.human" 0 100`
+`cargo r --release -- "prog.human" 0 100`
