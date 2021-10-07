@@ -6,8 +6,9 @@ For this you write `*.human` files, that can't be included by any other `.human`
 
 There are the following instructions:
 
-| inbox          | Read a number from user input                                                                               |
+| instruction    | description                                                                                                 |
 |----------------|-------------------------------------------------------------------------------------------------------------|
+| inbox          | Read a number from user input                                                                               |
 | output         | Output a number as result                                                                                   |
 | copyfrom n     | Copy the number on register n and write it to the current buffer                                            |
 | copyto n       | Copy the number from the current buffer to register n                                                       |
