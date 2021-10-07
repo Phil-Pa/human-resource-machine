@@ -26,4 +26,7 @@ There are 10 registers (register 0 to 10), in which you can write and read. The 
 
 To run your program, run
 `cargo r --release -- <filename.human> <enable_logging> <number1, number2, ...>`
-Example: `cargo r --release "prog.human" 0 100`
+
+Example:
+
+`cargo r --release "prog.human" 0 100`
