@@ -1,10 +1,9 @@
 use std::env;
-use std::io::*;
-use std::{fs::File, path::Path};
 
 mod machine;
+mod parser;
 
-use machine::{Instruction, Machine};
+use crate::parser::InstructionParser;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -21,7 +20,9 @@ fn main() {
         .map(|x| x.parse().expect("cannot parse to number"))
         .collect::<Vec<i32>>();
 
-    let mut machine = Machine::new_from_file(&args[1], enable_logging).unwrap();
+    let parser = InstructionParser::new_from_file(&args[1]).unwrap();
+
+    let mut machine = parser.parse().unwrap();
     let outbox = machine.run(&inbox);
 
     println!(
