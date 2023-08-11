@@ -1,18 +1,23 @@
-use std::{num::ParseIntError, io::{BufReader, BufRead}, fs::File};
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    num::ParseIntError,
+};
 
-use crate::machine::{Machine, Instruction};
+use crate::machine::{Instruction, Machine};
 
 #[derive(Debug)]
 pub enum InstructionParseError {
-    InstructionNotFound,
-    ParseIntError(ParseIntError),
-    InvalidSyntax
-}
-
-impl From<ParseIntError> for InstructionParseError {
-    fn from(err: ParseIntError) -> Self {
-        InstructionParseError::ParseIntError(err)
-    }
+    InstructionNotFound {
+        line_number: u32,
+    },
+    ParseIntError {
+        err: ParseIntError,
+        line_number: u32,
+    },
+    InvalidSyntax {
+        line_number: u32,
+    },
 }
 
 pub struct InstructionParser {
@@ -20,35 +25,58 @@ pub struct InstructionParser {
 }
 
 impl InstructionParser {
-
     pub fn new_from_file(filename: &str) -> std::io::Result<Self> {
-        let lines = BufReader::new(File::open(filename)?).lines().collect::<std::io::Result<Vec<String>>>()?;
+        let lines = BufReader::new(File::open(filename)?)
+            .lines()
+            .collect::<std::io::Result<Vec<String>>>()?;
 
-        Ok(InstructionParser {
-            lines
-        })
+        Ok(Self { lines })
+    }
+
+    pub fn new_from_str(program: &str) -> Self {
+        let lines = program
+            .lines()
+            .map(|line| String::from(line))
+            .collect::<Vec<String>>();
+        Self { lines }
     }
 
     pub fn parse(&self) -> std::result::Result<Machine, InstructionParseError> {
         let mut instructions = Vec::new();
 
+        let mut line_number = 1;
+
         for line in &self.lines {
             let line = line.as_str().trim();
-    
+
             let should_ignore_line = line.starts_with("//") || line.is_empty();
             if should_ignore_line {
                 continue;
             }
 
             let parts: Vec<&str> = line.split_ascii_whitespace().collect();
+            let num_parts = parts.len();
 
-            if parts.len() < 2 {
-                return Err(InstructionParseError::InvalidSyntax);
+            let mut number = 0;
+
+            if num_parts == 0 {
+                line_number += 1;
+                continue;
             }
 
-            let number = parts[1].parse()?;
+            if num_parts > 2 {
+                return Err(InstructionParseError::InvalidSyntax { line_number });
+            }
+
+            if num_parts == 2 {
+                number = parts[1]
+                    .parse()
+                    .map_err(|err| InstructionParseError::ParseIntError { err, line_number })?;
+
+            }
+
             let instruction = parts[0];
-    
+
             match instruction {
                 "inbox" => instructions.push(Instruction::Inbox),
                 "outbox" => instructions.push(Instruction::Outbox),
@@ -63,8 +91,10 @@ impl InstructionParser {
                 "jump" => instructions.push(Instruction::Jump(number)),
                 "jumpzero" => instructions.push(Instruction::JumpIfZero(number)),
                 "jumpnegative" => instructions.push(Instruction::JumpIfNegative(number)),
-                _ => return Err(InstructionParseError::InstructionNotFound),
+                _ => return Err(InstructionParseError::InstructionNotFound { line_number }),
             }
+
+            line_number += 1;
         }
 
         Ok(Machine::new(instructions, 10, false))

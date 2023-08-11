@@ -19,11 +19,20 @@ pub enum Instruction {
     JumpIfNegative(u32),
 }
 
+#[derive(Debug)]
+pub enum MachineRuntimeError {
+    // RegisterOutOfBounds,
+    EmptyInbox,
+    EmptyBuffer,
+    EmptyRegister,
+    InvalidJumpAddress,
+}
+
 pub struct Machine {
     instructions: Vec<Instruction>,
     register: Vec<Option<i32>>,
     buffer: Option<i32>,
-    enable_logging: bool,
+    pub enable_logging: bool,
     program_counter: usize,
     instruction_count: i32,
     num_to_label_map: HashMap<u32, usize>,
@@ -54,30 +63,33 @@ impl Machine {
         self.instruction_count
     }
     pub fn new(instructions: Vec<Instruction>, num_registers: usize, enable_logging: bool) -> Self {
-        let mut register: Vec<Option<i32>> = std::iter::repeat(None).take(num_registers).collect();
-        register[num_registers - 1] = Some(0i32);
+        let mut register = vec![None; num_registers];
+        register[num_registers - 1] = Some(0);
 
         let num_to_label_map = Machine::create_label_num_to_address_map(&instructions);
 
         Self {
             instructions,
             register,
-            buffer: Some(0i32),
+            buffer: Some(0),
             enable_logging,
             program_counter: 0,
             instruction_count: 0,
             num_to_label_map,
         }
     }
-    fn jump(&mut self, n: u32) -> usize {
-        *self.num_to_label_map.get(&n).unwrap()
+    fn jump(&mut self, n: u32) -> std::result::Result<usize, MachineRuntimeError> {
+        Ok(*self
+            .num_to_label_map
+            .get(&n)
+            .ok_or(MachineRuntimeError::InvalidJumpAddress)?)
     }
     fn reset(&mut self) {
-        self.buffer = Some(0i32);
+        self.buffer = Some(0);
         self.program_counter = 0;
         self.instruction_count = 0;
     }
-    pub fn run(&mut self, inbox: &[i32]) -> Vec<i32> {
+    pub fn run(&mut self, inbox: &[i32]) -> std::result::Result<Vec<i32>, MachineRuntimeError> {
         self.reset();
         let mut outbox = Vec::new();
 
@@ -99,90 +111,78 @@ impl Machine {
             }
             match ins {
                 Instruction::Inbox => {
-                    let next = inbox.pop_front();
-                    if next.is_some() {
-                        self.buffer = Some(*next.unwrap() as i32);
-                    } else {
-                        panic!("input in inbox must not be None");
-                    }
+                    self.buffer = Some(*inbox.pop_front().ok_or(MachineRuntimeError::EmptyInbox)?)
                 }
                 Instruction::Outbox => {
-                    outbox.push(self.buffer.expect("can't write None to outbox"));
+                    outbox.push(self.buffer.ok_or(MachineRuntimeError::EmptyBuffer)?);
                     self.buffer = None;
                 }
                 Instruction::CopyFrom(n) => {
-                    let copy = self.register[n as usize];
-                    // cant copy from register where nothing is
-                    assert!(copy.is_some());
-                    self.buffer = copy;
+                    self.buffer =
+                        Some(self.register[n as usize].ok_or(MachineRuntimeError::EmptyRegister)?)
                 }
                 Instruction::CopyTo(n) => {
-                    // cant copy when we have nothing
-                    assert!(self.buffer.is_some());
-                    self.register[n as usize] = self.buffer;
+                    self.register[n as usize] =
+                        Some(self.buffer.ok_or(MachineRuntimeError::EmptyBuffer)?)
                 }
                 Instruction::Add(n) => {
                     self.buffer = Some(
-                        self.register[n as usize].expect("cannot add None")
-                            + self.buffer.expect("cannot add None"),
-                    );
+                        self.register[n as usize].ok_or(MachineRuntimeError::EmptyRegister)?
+                            + self.buffer.ok_or(MachineRuntimeError::EmptyBuffer)?,
+                    )
                 }
                 Instruction::Sub(n) => {
                     self.buffer = Some(
-                        self.buffer.expect("cannot add None")
-                            - self.register[n as usize].expect("cannot add None"),
-                    );
+                        self.buffer.ok_or(MachineRuntimeError::EmptyBuffer)?
+                            - self.register[n as usize]
+                                .ok_or(MachineRuntimeError::EmptyRegister)?,
+                    )
                 }
                 Instruction::Mul(n) => {
                     self.buffer = Some(
-                        self.buffer.expect("cannot multiply None")
-                            * self.register[n as usize].expect("cannot multiply None"),
-                    );
+                        self.register[n as usize].ok_or(MachineRuntimeError::EmptyRegister)?
+                            * self.buffer.ok_or(MachineRuntimeError::EmptyBuffer)?,
+                    )
                 }
                 Instruction::BumpPlus(n) => {
-                    self.register[n as usize] =
-                        Some(self.register[n as usize].expect("cannot bump+ None") + 1);
+                    self.register[n as usize] = Some(
+                        self.register[n as usize].ok_or(MachineRuntimeError::EmptyRegister)? + 1,
+                    );
                     self.buffer = self.register[n as usize];
                 }
                 Instruction::BumpMinus(n) => {
-                    self.register[n as usize] =
-                        Some(self.register[n as usize].expect("cannot bump+ None") - 1);
+                    self.register[n as usize] = Some(
+                        self.register[n as usize].ok_or(MachineRuntimeError::EmptyRegister)? - 1,
+                    );
                     self.buffer = self.register[n as usize];
                 }
                 Instruction::Label(_) => {}
                 Instruction::Jump(n) => {
-                    let new_instruction_address = self.jump(n);
-
+                    let new_instruction_address = self.jump(n)?;
                     self.program_counter = new_instruction_address;
                     continue;
                 }
-                Instruction::JumpIfZero(instruction_number) => match self.buffer {
-                    Some(n) => {
-                        if n == 0 {
-                            let new_instruction_address = self.jump(instruction_number);
-                            self.program_counter = new_instruction_address;
-
-                            continue;
-                        }
+                Instruction::JumpIfZero(instruction_number) => {
+                    let buffer = self.buffer.ok_or(MachineRuntimeError::EmptyBuffer)?;
+                    if buffer == 0 {
+                        let new_instruction_address = self.jump(instruction_number)?;
+                        self.program_counter = new_instruction_address;
+                        continue;
                     }
-                    None => panic!("cannot compare with None"),
-                },
-                Instruction::JumpIfNegative(instruction_number) => match self.buffer {
-                    Some(n) => {
-                        if n < 0 {
-                            let new_instruction_address = self.jump(instruction_number);
-                            self.program_counter = new_instruction_address;
-
-                            continue;
-                        }
+                }
+                Instruction::JumpIfNegative(instruction_number) => {
+                    let buffer = self.buffer.ok_or(MachineRuntimeError::EmptyBuffer)?;
+                    if buffer < 0 {
+                        let new_instruction_address = self.jump(instruction_number)?;
+                        self.program_counter = new_instruction_address;
+                        continue;
                     }
-                    None => panic!("cannot compare with None"),
-                },
+                }
             }
 
             self.program_counter += 1;
         }
 
-        outbox
+        Ok(outbox)
     }
 }

@@ -23,23 +23,20 @@ fn main() {
     let parser = InstructionParser::new_from_file(&args[1]).unwrap();
 
     let mut machine = parser.parse().unwrap();
-    let outbox = machine.run(&inbox);
+    machine.enable_logging = enable_logging;
+    let outbox = machine.run(&inbox).unwrap();
 
     println!(
         "instructions: {}",
         machine.get_instruction_count() as usize + outbox.len()
     );
 
-    if enable_logging {
-        println!("{:?}", outbox);
-    }
+    println!("{:?}", outbox);
 }
 
 #[cfg(test)]
 mod tests {
-
-    use super::machine::*;
-    use super::*;
+    use crate::parser::InstructionParser;
 
     #[test]
     fn test_sum() {
@@ -63,9 +60,9 @@ label 2
 copyfrom 2
 outbox";
 
-        let lines = string_to_lines(program);
-        let mut machine = Machine::new(get_instructions(lines), 10, false);
-        let outbox = machine.run(&[5]);
+        let parser = InstructionParser::new_from_str(program);
+        let mut machine = parser.parse().unwrap();
+        let outbox = machine.run(&[5]).unwrap();
         assert_eq!(1, outbox.len());
         assert_eq!(15, outbox[0]);
     }
